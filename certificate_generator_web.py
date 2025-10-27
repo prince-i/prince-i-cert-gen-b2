@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pptx import Presentation
-import tempfile, os, zipfile
+import tempfile, os, subprocess
 
 st.set_page_config(page_title="Certificate Generator", layout="centered")
 st.title("Certificate Generator Tool")
@@ -46,39 +46,50 @@ except Exception as e:
     st.stop()
 
 # ======================================================
-# 4. GENERATE PERSONALIZED CERTIFICATES
+# 4. GENERATE PPTX & CONVERT TO PDF
 # ======================================================
 if st.button("Generate Certificates"):
+
     temp_dir = tempfile.mkdtemp()
-    pptx_paths = []
+    pptx_files = []
 
     for idx, name in enumerate(names, start=1):
-        # Copy the template
         prs_copy = Presentation(template_file)
-        # Replace placeholders
         for slide in prs_copy.slides:
             for shape in slide.shapes:
                 if shape.has_text_frame:
                     for paragraph in shape.text_frame.paragraphs:
                         for run in paragraph.runs:
                             run.text = run.text.replace("[NAME]", name).replace("[DATE]", event_date)
-        # Save personalized PPTX
         pptx_file = os.path.join(temp_dir, f"Certificate_{idx}_{name}.pptx")
         prs_copy.save(pptx_file)
-        pptx_paths.append(pptx_file)
+        pptx_files.append(pptx_file)
 
-    # Create ZIP file
-    zip_path = os.path.join(temp_dir, "All_Certificates.zip")
-    with zipfile.ZipFile(zip_path, "w") as zipf:
-        for file in pptx_paths:
-            zipf.write(file, os.path.basename(file))
+    # Convert all PPTX files to PDF using LibreOffice
+    pdf_files = []
+    for pptx in pptx_files:
+        subprocess.run([
+            "libreoffice", "--headless", "--convert-to", "pdf", "--outdir", temp_dir, pptx
+        ], check=True)
+        pdf_file = os.path.join(temp_dir, os.path.basename(pptx).replace(".pptx", ".pdf"))
+        pdf_files.append(pdf_file)
 
-    # Download button
-    with open(zip_path, "rb") as f:
+    # Merge PDFs into single file
+    from PyPDF2 import PdfMerger
+    merger = PdfMerger()
+    for pdf in pdf_files:
+        merger.append(pdf)
+
+    final_pdf = os.path.join(temp_dir, "All_Certificates.pdf")
+    merger.write(final_pdf)
+    merger.close()
+
+    # Download
+    with open(final_pdf, "rb") as f:
         st.download_button(
-            "Download All Certificates (ZIP of PPTX)",
+            "Download All Certificates (PDF)",
             f,
-            file_name="All_Certificates.zip"
+            file_name="All_Certificates.pdf"
         )
 
     st.success("All certificates generated and ready to download!")
