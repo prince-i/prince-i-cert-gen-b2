@@ -46,39 +46,66 @@ except Exception as e:
     st.stop()
 
 # ======================================================
-# 4. GENERATE PERSONALIZED CERTIFICATES
+# 4. GENERATE PPTX & ZIP THEM WITH BAT FILE
 # ======================================================
 if st.button("Generate Certificates"):
-    temp_dir = tempfile.mkdtemp()
-    pptx_paths = []
 
+    temp_dir = tempfile.mkdtemp()
+    pptx_files = []
+
+    # Generate a PowerPoint for each name
     for idx, name in enumerate(names, start=1):
-        # Copy the template
         prs_copy = Presentation(template_file)
-        # Replace placeholders
         for slide in prs_copy.slides:
             for shape in slide.shapes:
                 if shape.has_text_frame:
                     for paragraph in shape.text_frame.paragraphs:
                         for run in paragraph.runs:
                             run.text = run.text.replace("[NAME]", name).replace("[DATE]", event_date)
-        # Save personalized PPTX
         pptx_file = os.path.join(temp_dir, f"Certificate_{idx}_{name}.pptx")
         prs_copy.save(pptx_file)
-        pptx_paths.append(pptx_file)
+        pptx_files.append(pptx_file)
 
-    # Create ZIP file
-    zip_path = os.path.join(temp_dir, "All_Certificates.zip")
-    with zipfile.ZipFile(zip_path, "w") as zipf:
-        for file in pptx_paths:
-            zipf.write(file, os.path.basename(file))
+    # Create the batch file for converting PPTX to PDF using either LibreOffice or MS PowerPoint
+    bat_file_path = os.path.join(temp_dir, "convert_pptx_to_pdf.bat")
+    with open(bat_file_path, "w") as bat_file:
+        bat_file.write("""@echo off
+setlocal
+REM Batch file to convert PPTX to PDF using LibreOffice or PowerPoint
 
-    # Download button
-    with open(zip_path, "rb") as f:
+REM Set LibreOffice path if using LibreOffice (adjust the path if necessary)
+set LIBREOFFICE_PATH="C:\\Program Files\\LibreOffice\\program\\soffice.exe"
+
+REM Check if LibreOffice is available
+if exist %LIBREOFFICE_PATH% (
+    echo Converting PPTX to PDF using LibreOffice...
+    for %%f in (*.pptx) do (
+        "%LIBREOFFICE_PATH%" --headless --convert-to pdf "%%f"
+    )
+) else (
+    echo LibreOffice not found. Trying PowerPoint COM API...
+
+    REM PowerShell script to run PowerPoint conversion (only works with MS Office installed)
+    powershell -Command "Start-Process -NoNewWindow -FilePath 'powershell' -ArgumentList '-ExecutionPolicy', 'Bypass', '-Command', 'foreach ($pptx in Get-ChildItem *.pptx) { $ppt = New-Object -ComObject PowerPoint.Application; $ppt.Visible = $true; $presentation = $ppt.Presentations.Open($pptx.FullName); $presentation.SaveAs($pptx.FullName.Replace('.pptx', '.pdf'), 32); $presentation.Close(); $ppt.Quit(); }'"
+
+)
+
+endlocal
+""")
+
+    # Create a ZIP file and add all PowerPoint files and the batch file to it
+    zip_file_path = os.path.join(temp_dir, "Certificates.zip")
+    with zipfile.ZipFile(zip_file_path, "w") as zipf:
+        for pptx_file in pptx_files:
+            zipf.write(pptx_file, os.path.basename(pptx_file))
+        zipf.write(bat_file_path, "convert_pptx_to_pdf.bat")
+
+    # Provide the ZIP file for download
+    with open(zip_file_path, "rb") as f:
         st.download_button(
-            "Download All Certificates (ZIP of PPTX)",
+            "Download All Certificates (ZIP)",
             f,
-            file_name="All_Certificates.zip"
+            file_name="Certificates.zip"
         )
 
-    st.success("All certificates generated and ready to download!")
+    st.success("All certificates generated and zipped. Ready to download!")
