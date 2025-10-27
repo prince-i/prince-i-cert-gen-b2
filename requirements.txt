@@ -1,5 +1,5 @@
 streamlit
-pandas
 python-pptx
+python-docx
 reportlab
-Pillow
+openpyxl
