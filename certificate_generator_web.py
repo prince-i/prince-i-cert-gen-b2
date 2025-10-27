@@ -46,7 +46,7 @@ except Exception as e:
     st.stop()
 
 # ======================================================
-# 4. GENERATE PPTX & ZIP THEM WITH BAT FILE
+# 4. GENERATE PPTX & ZIP THEM
 # ======================================================
 if st.button("Generate Certificates"):
 
@@ -66,12 +66,11 @@ if st.button("Generate Certificates"):
         prs_copy.save(pptx_file)
         pptx_files.append(pptx_file)
 
-    # Create a ZIP file and add all PowerPoint files and the batch file to it
+    # Create a ZIP file and add all PowerPoint files to it
     zip_file_path = os.path.join(temp_dir, "Certificates.zip")
     with zipfile.ZipFile(zip_file_path, "w") as zipf:
         for pptx_file in pptx_files:
             zipf.write(pptx_file, os.path.basename(pptx_file))
-        zipf.write(bat_file_path, "convert_pptx_to_pdf.bat")
 
     # Provide the ZIP file for download
     with open(zip_file_path, "rb") as f:
@@ -82,4 +81,3 @@ if st.button("Generate Certificates"):
         )
 
     st.success("All certificates generated and zipped. Ready to download!")
-
