@@ -1,11 +1,7 @@
 import streamlit as st
 import pandas as pd
 from pptx import Presentation
-from pptx.util import Pt
-from reportlab.pdfgen import canvas
-from reportlab.lib.utils import ImageReader
-from PIL import Image
-import tempfile, os
+import tempfile, os, zipfile
 
 st.set_page_config(page_title="Certificate Generator", layout="centered")
 st.title("Certificate Generator Tool")
@@ -49,50 +45,40 @@ except Exception as e:
     st.error(f"Error loading PowerPoint file: {e}")
     st.stop()
 
-slide_width_pt = prs.slide_width / 914400 * 72
-slide_height_pt = prs.slide_height / 914400 * 72
-st.info(f"Template size detected: {slide_width_pt:.1f} x {slide_height_pt:.1f} points")
-
 # ======================================================
-# 4. GENERATE PERSONALIZED CERTIFICATES & PDF
+# 4. GENERATE PERSONALIZED CERTIFICATES
 # ======================================================
 if st.button("Generate Certificates"):
-
     temp_dir = tempfile.mkdtemp()
-    pdf_path = os.path.join(temp_dir, "All_Certificates.pdf")
-    c = canvas.Canvas(pdf_path, pagesize=(slide_width_pt, slide_height_pt))
+    pptx_paths = []
 
     for idx, name in enumerate(names, start=1):
+        # Copy the template
         prs_copy = Presentation(template_file)
+        # Replace placeholders
         for slide in prs_copy.slides:
             for shape in slide.shapes:
                 if shape.has_text_frame:
                     for paragraph in shape.text_frame.paragraphs:
                         for run in paragraph.runs:
-                            if "[NAME]" in run.text or "[DATE]" in run.text:
-                                run.text = run.text.replace("[NAME]", name).replace("[DATE]", event_date)
-
-        # Save individual PPTX (optional)
-        pptx_file = os.path.join(temp_dir, f"cert_{idx}.pptx")
+                            run.text = run.text.replace("[NAME]", name).replace("[DATE]", event_date)
+        # Save personalized PPTX
+        pptx_file = os.path.join(temp_dir, f"Certificate_{idx}_{name}.pptx")
         prs_copy.save(pptx_file)
+        pptx_paths.append(pptx_file)
 
-        # --- Convert slide to image in memory ---
-        img_path = os.path.join(temp_dir, f"cert_{idx}.png")
-        # python-pptx cannot render images directly, so we use a simple trick:
-        # Export slide as PNG using Pillow with white background
-        for slide_idx, slide in enumerate(prs_copy.slides):
-            img = Image.new("RGB", (prs_copy.slide_width, prs_copy.slide_height), "white")
-            img.save(img_path)
-            # Add to PDF
-            c.drawImage(ImageReader(img_path), 0, 0, width=slide_width_pt, height=slide_height_pt)
-            c.showPage()
+    # Create ZIP file
+    zip_path = os.path.join(temp_dir, "All_Certificates.zip")
+    with zipfile.ZipFile(zip_path, "w") as zipf:
+        for file in pptx_paths:
+            zipf.write(file, os.path.basename(file))
 
-    c.save()
+    # Download button
+    with open(zip_path, "rb") as f:
+        st.download_button(
+            "Download All Certificates (ZIP of PPTX)",
+            f,
+            file_name="All_Certificates.zip"
+        )
 
-    # ======================================================
-    # 5. DOWNLOAD BUTTON
-    # ======================================================
-    with open(pdf_path, "rb") as f:
-        st.download_button("Download All Certificates (PDF)", f, file_name="All_Certificates.pdf")
-
-    st.success("All done!")
+    st.success("All certificates generated and ready to download!")
